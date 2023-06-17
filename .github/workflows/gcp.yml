@@ -24,10 +24,10 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: Create Artifact Registry if it doesn't exist
-        run: |
-          gcloud artifacts repositories describe ${{ env.REPO }} --project=${{ env.PROJECT_ID }} --location=us-west2 --repository-format=docker || \
-          gcloud artifacts repositories create ${{ env.REPO }} --project=${{ env.PROJECT_ID }} --location=us-west2 --repository-format=docker
+     # - name: Create Artifact Registry if it doesn't exist
+     #   run: |
+     #     gcloud artifacts repositories describe ${{ env.REPO }} --project=${{ env.PROJECT_ID }} --location=us-west2 --repository-format=docker || \
+     #     gcloud artifacts repositories create ${{ env.REPO }} --project=${{ env.PROJECT_ID }} --location=us-west2 --repository-format=docker
 
       - name: Automatic Tagging of Release
         id: increment-git-tag
