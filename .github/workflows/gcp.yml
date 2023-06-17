@@ -1,0 +1,35 @@
+---
+name: Build and Push Python image to Google Cloud
+on:
+  push:
+    branches: [ main ]
+jobs:
+  build-push-gcr:
+    name: Build and Push to GCP
+    runs-on: ubuntu-latest
+    env: 
+      PROJECT_ID: football-match-prediction
+      PROJECT_NAME: rosy-fiber-380705
+      REPO: api-extractors-go
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: use credentials
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.SERVICE_ACCOUNT_P }}'
+
+      - uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Build and push fixture-stats
+        env:
+          IMAGE_NAME: fixture-stats
+        run: |
+          docker build -t $IMAGE_NAME -f Dockerfile ./extractors/fixtures_stats
+          gcloud auth configure-docker --quiet
+          gcloud auth configure-docker us-west2-docker.pkg.dev --quiet
+          docker tag $IMAGE_NAME:latest us-west2-docker.pkg.dev/$PROJECT_NAME/$REPO/$IMAGE_NAME:latest
+          docker push us-west2-docker.pkg.dev/$PROJECT_NAME/$REPO/$IMAGE_NAME:latest
