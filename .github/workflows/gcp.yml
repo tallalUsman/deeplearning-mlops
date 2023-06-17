@@ -28,7 +28,7 @@ jobs:
         env:
           IMAGE_NAME: fixtures-stats
         run: |
-          docker build -t fixtures-stats ./extractors
+          docker build -t $IMAGE_NAME:latest ./extractors
           gcloud auth configure-docker --quiet
           gcloud auth configure-docker us-west2-docker.pkg.dev --quiet
           docker tag $IMAGE_NAME:latest us-west2-docker.pkg.dev/$PROJECT_NAME/$REPO/$IMAGE_NAME:latest
