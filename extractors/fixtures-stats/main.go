@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"runtime"
 	"sync"
 	"time"
 	"os"
@@ -44,6 +43,13 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return fmt.Errorf("storage.NewClient: %v", err)
+	}
+	defer client.Close()
 
 	numGoroutines := 10 // use number of CPUs as number of goroutines
 	results := make(chan Result)
