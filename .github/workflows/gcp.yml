@@ -37,9 +37,12 @@ jobs:
       - name: Build and push fixture-stats
         env:
           IMAGE_NAME: fixtures-stats
+          GIT_TAG: ${{ steps.increment-git-tag.outputs.git-tag }}
         run: |
           docker build -t $IMAGE_NAME:latest ./extractors/$IMAGE_NAME
           gcloud auth configure-docker --quiet
           gcloud auth configure-docker us-west2-docker.pkg.dev --quiet
           docker tag $IMAGE_NAME:latest us-west2-docker.pkg.dev/$PROJECT_NAME/$REPO/$IMAGE_NAME:latest
+          docker tag $IMAGE_NAME:latest us-west2-docker.pkg.dev/$PROJECT_NAME/$REPO/$IMAGE_NAME:$GIT_TAG
           docker push us-west2-docker.pkg.dev/$PROJECT_NAME/$REPO/$IMAGE_NAME:latest
+          docker push us-west2-docker.pkg.dev/$PROJECT_NAME/$REPO/$IMAGE_NAME:$GIT_TAG
