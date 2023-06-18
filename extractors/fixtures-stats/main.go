@@ -49,7 +49,7 @@ func main() {
 
 	defer client.Close()
 
-	numGoroutines := 10 // use number of CPUs as number of goroutines
+	numGoroutines := 3 // use number of CPUs as number of goroutines
 	results := make(chan Result)
 	datesChan := make(chan string)
 
@@ -66,6 +66,7 @@ func main() {
 				if err == nil {
 					results <- Result{Date: date, Data: data}
 				}
+				time.Sleep(1 * time.Second)
 			}
 		}()
 	}
@@ -122,6 +123,7 @@ func main() {
                     if err == nil {
                         fixtureRes <- Result{Date: result.Date, Data: data}
                     }
+					time.Sleep(1 * time.Second)
                 }
             }()
         }
