@@ -2,13 +2,13 @@ package main
 
 import (
 	"bytes"
-//	"context"
-//	"cloud.google.com/go/storage"
+	"context"
+	"cloud.google.com/go/storage"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-//	"runtime"
+	"runtime"
 	"sync"
 	"time"
 	"os"
@@ -17,8 +17,7 @@ import (
 const (
 	baseURL = "https://api-football-v1.p.rapidapi.com/v3/fixtures?date=%v"
 	baseURL_stats = "https://api-football-v1.p.rapidapi.com/v3/fixtures/statistics?fixture=%d"
-	bucketName_fix = "your-bucket-name" // replace with your bucket name
-	bucketName_stats = "your-bucket-name" // replace with your bucket name
+	bucketName = "football_data_api" // replace with your bucket name
 )
 
 type Result struct {
@@ -90,11 +89,10 @@ func main() {
 			continue
 		}
 
-		err = saveJSON(fmt.Sprintf("fixture_%s.json", result.Date), prettyJSON.Bytes())
+		err = writeToGCS_fixtures(ctx, client, result.Date, prettyJSON.Bytes())
 		if err != nil {
-			fmt.Printf("Failed to format JSON data for date %s: %v\n", result.Date, err)
-			continue
-		}
+			fmt.Printf("Failed to write data for date %s: %v\n", result.Date, err)
+			}
 
         // Parse the fixture IDs
         var apiRes APIResponse
@@ -147,7 +145,6 @@ func main() {
 				continue
 			}
 			// Combine different ones together
-			fmt.Printf("Fixture data for date %s: %s\n", res.Date, jsonData)
 		
 			// Create a ResultTWO and append it to allFixtureData
 			resTwo := ResultTWO{Date: res.Date, Data: jsonData}
@@ -163,55 +160,47 @@ func main() {
 
 		jsonDataBytes := []byte(jsonData)
 
-		err = saveJSON(fmt.Sprintf("fixture_stat_%s.json", result.Date), jsonDataBytes)
+		err = writeToGCS_stat(ctx, client, result.Date, jsonDataBytes)
 		if err != nil {
-			fmt.Printf("Failed to format JSON data for date %s: %v\n", result.Date, err)
-			continue
-		}
-        
-     //   file, err := os.Create("fixtures.json")
-     //   if err != nil {
-     //       fmt.Printf("Failed to create file: %v\n", err)
-     //       continue
-     //   }
-     //   defer file.Close()
-        
-	//	jsonDataBytes := []byte(jsonData)
-
-	//	_, err = file.Write(jsonDataBytes)
-	//	if err != nil {
-	//		fmt.Printf("Failed to write to file: %v\n", err)
-	//		continue
-	//	}
+			fmt.Printf("Failed to write data for date %s: %v\n", result.Date, err)
+			}
+		
 	}
 }
 
-
-		// Upload data to GCS
-//		err = writeToGCS(ctx, client, result.Date, prettyJSON.Bytes())
-//		if err != nil {
-//			fmt.Printf("Failed to write data for date %s: %v\n", result.Date, err)
-//		}
-//	}
-// }
-
 // other functions...
 
-//func writeToGCS(ctx context.Context, client *storage.Client, date string, data []byte) error {
-//	objectName := fmt.Sprintf("%s/%s.json", date, date)  // Creates "folder" for each date
+func writeToGCS_stat(ctx context.Context, client *storage.Client, date string, data []byte) error {
+	objectName := fmt.Sprintf("raw/fixture-stats/%s/%s.json", date, date)  // Creates "folder" for each date
 
-//	bucket := client.Bucket(bucketName)
-//	object := bucket.Object(objectName)
-//	writer := object.NewWriter(ctx)
-//
-//	if _, err := writer.Write(data); err != nil {
-//		return err
-//	}
-//	if err := writer.Close(); err != nil {
-//		return err
-//	}
-//	return nil
-//}
+	bucket := client.Bucket(bucketName)
+	object := bucket.Object(objectName)
+	writer := object.NewWriter(ctx)
+
+	if _, err := writer.Write(data); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func writeToGCS_fixtures(ctx context.Context, client *storage.Client, date string, data []byte) error {
+	objectName := fmt.Sprintf("raw/fixtures/%s/%s.json", date, date)  // Creates "folder" for each date
+
+	bucket := client.Bucket(bucketName)
+	object := bucket.Object(objectName)
+	writer := object.NewWriter(ctx)
+
+	if _, err := writer.Write(data); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	return nil
+}
 
 func makeAPIRequest(url string) ([]byte, error) {
 	req, _ := http.NewRequest("GET", url, nil)
