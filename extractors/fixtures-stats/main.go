@@ -46,9 +46,7 @@ func main() {
 
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx)
-	if err != nil {
-		return fmt.Errorf("storage.NewClient: %v", err)
-	}
+
 	defer client.Close()
 
 	numGoroutines := 10 // use number of CPUs as number of goroutines
