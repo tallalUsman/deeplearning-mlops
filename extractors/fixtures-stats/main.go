@@ -39,7 +39,7 @@ type APIResponse struct {
 
 
 func main() {
-	dates, err := getDailyDates("2022-06-01", "2022-06-02")
+	dates, err := getDailyDates("2014-08-01", "2014-12-01")
 	if err != nil {
 		panic(err)
 	}
