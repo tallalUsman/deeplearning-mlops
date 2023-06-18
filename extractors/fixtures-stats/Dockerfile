@@ -18,4 +18,6 @@ COPY . .
 RUN go build -o main .
 
 # Command to run the executable
-CMD ["./main"]
+ENTRYPOINT ["./main"]
+
+CMD ["date1", "date2"]

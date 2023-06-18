@@ -39,7 +39,17 @@ type APIResponse struct {
 
 
 func main() {
-	dates, err := getDailyDates("2014-08-13", "2014-10-01")
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: go run main.go [start_date] [end_date]")
+		fmt.Println("Both dates must be in the format YYYY-MM-DD.")
+		os.Exit(1)
+	}
+	startDate := os.Args[1]
+	endDate := os.Args[2]
+
+
+
+	dates, err := getDailyDates(startDate, endDate)
 	if err != nil {
 		panic(err)
 	}
@@ -208,7 +218,8 @@ func writeToGCS_fixtures(ctx context.Context, client *storage.Client, date strin
 
 func makeAPIRequest(url string) ([]byte, error) {
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Add("X-RapidAPI-Key", "fbd410bba0mshcda5e4098c490e1p1617c7jsnd3b671676e3d")
+	apiKey := os.Getenv("RAPID_API_KEY")
+	req.Header.Add("X-RapidAPI-Key", apiKey)
 	req.Header.Add("X-RapidAPI-Host", "api-football-v1.p.rapidapi.com")
 
 	client := &http.Client{}
