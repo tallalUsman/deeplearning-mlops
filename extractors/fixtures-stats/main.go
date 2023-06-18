@@ -39,7 +39,7 @@ type APIResponse struct {
 
 
 func main() {
-	dates, err := getDailyDates("2014-08-01", "2014-12-01")
+	dates, err := getDailyDates("2014-08-13", "2014-10-01")
 	if err != nil {
 		panic(err)
 	}
@@ -49,7 +49,7 @@ func main() {
 
 	defer client.Close()
 
-	numGoroutines := 3 // use number of CPUs as number of goroutines
+	numGoroutines := 4 // use number of CPUs as number of goroutines
 	results := make(chan Result)
 	datesChan := make(chan string)
 
@@ -66,7 +66,6 @@ func main() {
 				if err == nil {
 					results <- Result{Date: date, Data: data}
 				}
-				time.Sleep(1 * time.Second)
 			}
 		}()
 	}
@@ -123,7 +122,6 @@ func main() {
                     if err == nil {
                         fixtureRes <- Result{Date: result.Date, Data: data}
                     }
-					time.Sleep(1 * time.Second)
                 }
             }()
         }
