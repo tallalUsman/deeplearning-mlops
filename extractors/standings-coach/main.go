@@ -192,7 +192,7 @@ func main() {
 		
 		err = writeToGCS_coach(ctx, client, res.TeamID, prettyJSON.Bytes())
 		if err != nil {
-			fmt.Printf("Failed to write data for date %s: %v\n", es.TeamID, err)
+			fmt.Printf("Failed to write data for date %s: %v\n", res.TeamID, err)
 		 	}
 		
 		fmt.Printf("All coach data: %s\n", prettyJSON.Bytes())
