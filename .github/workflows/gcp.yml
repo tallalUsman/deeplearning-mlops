@@ -47,7 +47,7 @@ jobs:
           docker push us-west2-docker.pkg.dev/$PROJECT_NAME/$REPO/$IMAGE_NAME:latest
           docker push us-west2-docker.pkg.dev/$PROJECT_NAME/$REPO/$IMAGE_NAME:$GIT_TAG
 
-     - name: Build and push coaches and standings
+      - name: Build and push coaches and standings
         env:
           IMAGE_NAME: standings-coach
           GIT_TAG: ${{ steps.increment-git-tag.outputs.git-tag }}
