@@ -24,4 +24,4 @@ df1 = (df.select(explode(col("response")))
        )
 
 
-df1.write.format("delta").mode("overwrite").saveAsTable("bronze_standings")
+df1.write.format("parquet").mode("overwrite").saveAsTable("bronze_standings")
