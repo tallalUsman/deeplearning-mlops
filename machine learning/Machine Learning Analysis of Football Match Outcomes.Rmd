@@ -1,0 +1,669 @@
+---
+title: "Machine Learning Analysis of Football Match Outcomes"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+```{r echo = false, warning=false, results="hide"}
+pkgs <- c("tidyverse","openxlsx","stringr","lubridate","magrittr", "haven","rstudioapi","readxl","ggrepel","plyr", "dplyr", "mosaic", "class", "glmnet", "MASS", "splitstackshape", "rms", "caret", "nnet", "fastDummies", "clusterSim", "randomForest", "xgboost", "e1071")
+# install.packages(pkgs)
+lapply(pkgs, require, character.only = TRUE)
+Output <- 'C:/Users/Talla/Documents/Projects/FIFA Match Win Prediction/5 - Machine Learning/OUTPUT/'
+Balanced_Training <- readRDS(file = paste0(Output,"Balanced Training.rds"))
+Testing_df <- readRDS(file = paste0(Output,"Testing.rds"))
+Train_Results <- Balanced_Training[['Class']]
+Actual_Test_Results <- Testing_df[['Result']]
+Total_observations <- length(Actual_Test_Results)
+
+
+PredictorVariables <- Balanced_Training %>% 
+  dplyr::select(c(age_Att:Def_Work_Rate_Ind_Mid, starts_with('Match_Combo')))%>%
+  names( )
+
+
+Formula <- formula(paste("Class ~ ", 
+                         paste(PredictorVariables, collapse=" + ")))
+
+
+X_Shrinkage <- Balanced_Training %>%
+  dplyr::select(-c(Class)) %>%
+  data.matrix()
+
+Test_Shrinkage <- Testing_df %>%
+  data.matrix()
+Test_Shrinkage <- Test_Shrinkage[,10:ncol(Test_Shrinkage)]
+
+
+#Principal Component
+Continuous_Variables <- Balanced_Training %>%
+  dplyr::select(-c(starts_with('Match_Combo'), Class))
+
+Fixed_Effects_train <- Balanced_Training %>%
+  dplyr::select(c(starts_with('Match_Combo')))
+
+Results_train <- Balanced_Training %>%
+  dplyr::select(c(Class))
+
+Continuous_Variables_test <- Testing_df %>%
+  dplyr::select(-c(starts_with('Match_Combo'), Result))
+Continuous_Variables_test <- Continuous_Variables_test[,9:length(Continuous_Variables_test)]
+
+
+Fixed_Effects_test  <- Testing_df %>%
+  dplyr::select(c(starts_with('Match_Combo')))
+```
+# Introduction
+
+This project aims to use publicly available data for football players to attempt to predict the outcomes for the recent 2020-21 football seasons for the First and Second Football divisions in Spain, France, England, Germany, Italy, Belgium, Scotland and Netherlands. The 2014-15 to 2019-20 season match outcomes are used as a training set.
+
+Predicting match outcomes is an especially tricky exercise despite having a lot of metrics regarding the statistics of every player in a team, other factors such as morale, injuries, pitch/weather conditions and the specific strategies employed by teams against each other. Despite the use of fixed effects it is important to realize that there is some aspect of reinforcement learning, team strategies are constantly adapting, at times several times within the same game. Another important aspect of this study is actually checking how much does strategy matter. Any predictive power that falls short, can be attributed to strategy and its lack of control in our model. 
+
+While there are ways of controlling for strategy they require more detailed non-public data and more computationally intensive techniques which we will discuss further later.
+
+# 1. Model & Data
+
+### 1.11. Football Players Data
+Football players data is gathered from FIFA, and includes information that includes a players speed, shooting, agility, physicality etc. for each individual season. This data is at the player level. The data is reduced to provide one row for each team that includes the average of that teams members ability metrics. This provides a row of metrics for each Team for one football season.
+
+This data provides nearly 230 columns of metrics for each team during a single season. The chart below shows the distribution of the overall metric for each team.
+
+### 1.12. Football Match Data
+Football Match data is gathered from https://www.football-data.co.uk. Which provides data for the date of the match, the final score as well as which team was the home/away side.
+
+One season for a single league contains approximately 300-400 league games depending on the number of teams (excluding external competitions).
+
+### 1.13 Balancing the Training set
+
+The match outcomes while balanced between Lose and Win outcomes, include a smaller proportion of Draws. This means that we have unbalanced training set resulting in few to none accurate Draw predictions. To counter this we sample upwards to create a Balanced training data set that includes an equal number Wins, Losses and Draws. 
+
+While SMOTE (Synthetic Minority Oversampling TEchnique) is an alternative to sampling upwards to create a balanced training set, due to high dimensionality of our data it is very difficult to implement SMOTE efficiently.
+
+### 1.14 The Model
+
+In addition to the player metric based variables mentioned in 1.11, fixed effects to control for Home team advantage and each Match combination are included. These will capture the advantage home teams might get from playing on a pitch that they are more familiar with surrounded by their fans. The Match combination fixed effects control for any strategic effects that may play out when these two teams face off against one another. 
+
+Given the high dimensional nature of the data set, there is a high degree of correlation within the variables as illustrated below.
+```{r cache =TRUE,  warning=false}
+corr <- cor(Continuous_Variables, method="pearson")
+corrplot::corrplot(corr, method= "color", order = "hclust", tl.pos = 'n')
+```
+
+To correct for this we will also use Principal Component analysis to transform the data set and repeat some of the methods with the transformed data set to ensure that results stay the same. The PCA will be applied to only the continuous metric variables not the Fixed effects will be merged on separately in t their original form.
+
+# 2. Results
+We will compare our results to the baseline of allocating the match outcome randomly to one of the three classes, therefore our average accuracy in the case of a random assignment strategy is 33.33%. Any improvement mentioned, is referenced as an improvement above this baseline.
+
+The table below represents the results and accuracy of the various different ML methods used. The code and the parameters used to get these results is described in greater detail in later portions. The Boosted Trees perform the best however .
+
+```{r cache =TRUE,  warning=false, echo=FALSE}
+Results_DF <- data.frame(Method = c('KNN', 'Ordered Logit', 'Multinomial Logit', 'Linear Discriminant Analysis', 'Lasso', 'Elastic Net', 'Random Forest', 'Boosted Trees', 'PCA SVM', 'PCA KNN' ,'PCA Ordered Logit', 'PCA Multinomial Logit', 'PCA Linear Discriminant Analysis' ),
+                         Accuracy = c(0.3902, 0.4069, 0.4558, 0.4033 , 0.4507, 0.4523, 0.4873, BoostedF_accuracy, SVM_accuracy, PCA_knn_accuracy, PCA_Ologit_accuracy, PCA_Mlogit_accuracy, PCA_LDA_accuracy))
+```
+
+```{r cache =TRUE,  warning=false}
+print(Results_DF, n =14)
+```
+
+One consistent pattern illustrated in all ML models shows that the models have more difficulty accurately predicting a draw as compared to a win or a loss. This might be explained by the fact that draws themselves are a product idiosyncrasies or team strategies to "park the bus" (only play defensive) in the face of a far stronger opponent. 
+
+Several football strategies such as playing on the counter, meaning that strong teams can draw with teams that anticipate they have little probability of wining using usual strategies therefore heavily rely on defense to secure a draw. Therefore we are likely to see a clear win/loss in teams that are closely matched in terms of metrics however if there exists an imbalance in the strength of the teams we might see a draw with greater likelihood as compared to a match with closely matched teams.
+
+The results show that without the deficiency of draw predictions our models do far better for loses and wins as compared to draw. For instance the Boosted trees predict wins by an accuracy of 75%!
+
+The SVM performs the worst due to high dimensionality and correlation, causing inefficiency of used features in the original data for the SVM resulting in overfitting and a generally bad fit
+
+### 2.1. Next Steps
+
+While the predictions rates are promising especially given the lack of dynamic data i.e. our data includes only snap shots of the teams, not ratings that are updated from match to match. These can be further improved by using more detailed data which includes the team manager, which could help control for team strategy.
+
+Using Non-linear kernel methods with sufficient interaction terms could also lead to greater accuracy and control for some of the strategic decision that lead to inaccuracy.
+
+Given the high correlation between the different variables it might also be worthwhile using Partial Least Squares in addition to PCA for dimensionality reduction, in that it may improve performance. We see that PCA improves prediction in some models.
+
+
+# 3. Analysis on Un-Transformed Data
+### 3.1. K Nearest Neighbours
+
+```{r echo = false, cache =TRUE}
+KNN_Train <- Balanced_Training %>%
+  dplyr::select(c(overall_Att:defending_Mid, Class)) 
+
+KNN_Test <- Testing_df %>%
+  dplyr::select(overall_Att:defending_Mid)
+
+PredictorVariables_knn <- Balanced_Training %>% 
+  dplyr::select(c(overall_Att:defending_Mid))%>%
+  names( )
+Formula_KNN <- formula(paste("Class ~ ", 
+                         paste(PredictorVariables_knn, collapse=" + ")))
+```
+
+
+We cross-validation to choose the best k for our KNN analysis. We run KNN on a subset of the variables, we can't utilize all the variables since there are some 200 metric variables combined with greater than a thousand fixed effects. Including all variables in the KNN analysis is likely to result in no points being near each other due to "curse of dimensionality".
+
+```{r cache =TRUE,  warning=false}
+set.seed(123)
+ctrl <- trainControl(method="repeatedcv",repeats = 3)
+knnFit <- train(Formula_KNN, data = KNN_Train, method = "knn", trControl = ctrl, preProcess = c("center","scale"), tuneLength = 20)
+knnFit
+```
+
+
+
+
+The ideal k chosen by cross-validation for KNN was 5. Using the CV chosen parameter yields the following confusion matrix and prediction accuracy for the test observations.
+```{r cache =TRUE,  warning=false,echo = false}
+set.seed(123)
+Best_K <- as.integer(knnFit$bestTune)
+KNN_Train <- Balanced_Training %>%
+  dplyr::select(overall_Att:defending_Mid)
+knn_results = knn(KNN_Train, KNN_Test, Train_Results ,k=Best_K)
+```
+
+```{r cache =TRUE,  warning=false}
+confusionMatrix(Actual_Test_Results,knn_results)
+
+KNN_accuracy <- sum(diag(table(Actual_Test_Results,knn_results)))/Total_observations
+paste0("The accuracy rate for the K Nearest Neighbours is ",KNN_accuracy)
+
+```
+
+
+### 3.2. Ordered and Multinomial Logit
+
+Next we implement two linear methods, an Ordered and Multinomial Logit model, and use those to predict the outcomes for our test set. The Ordered logit assumes order among the outcome variables with Loss being the worst and Win being the best, and Draw being the neutral outcome. Whereas as the Multinomial logit assumes no such order among the outcome variables and instead considers each as having no intrinsic levels.
+```{r cache =TRUE,  warning=false}
+Ordered_Logit <- orm(Formula, data = Balanced_Training, maxit= 250)
+Olog_probs_m <- predict(Ordered_Logit ,Testing_df , type="fitted.ind")
+
+Multi_nLogit <- multinom(Formula, data = Balanced_Training, maxit = 250, MaxNWts= 40000)
+Mlog_probs <- predict(Multi_nLogit ,Testing_df , type="class")
+```
+
+
+```{r cache =TRUE,  warning=false,echo = false}
+Olog_probs =rep ("Lose" ,dim(Testing_df)[1])
+Olog_probs[Olog_probs_m[,1] < Olog_probs_m[,2] & Olog_probs_m[,2] > Olog_probs_m[,3]]="Draw"
+Olog_probs[Olog_probs_m[,3] > Olog_probs_m[,2] & Olog_probs_m[,3] > Olog_probs_m[,1]]="Win"
+
+Temp1 <- table(Actual_Test_Results,Olog_probs)
+Ologit_accuracy <- sum(Temp1['Lose', 'Lose'] + Temp1['Win', 'Win'] + Temp1['Draw', 'Draw'])/Total_observations
+Mlogit_accuracy <- sum(diag(table(Actual_Test_Results,Mlog_probs)))/Total_observations
+
+```
+
+The confusion matrix and prediction accuracy for each of the two models is shown below.
+
+```{r cache =TRUE,  warning=false }
+u <- union(Olog_probs, Actual_Test_Results)
+t <- table(factor(Olog_probs, u), factor(Actual_Test_Results, u))
+confusionMatrix(t)
+
+paste0("The accuracy rate for the Ordered Logit is ",Ologit_accuracy)
+
+
+confusionMatrix(Actual_Test_Results,Mlog_probs)
+paste0("The accuracy rate for the Multinomial Logit is ",Mlogit_accuracy)
+
+```
+
+
+### 3.3. Linear Discriminant Analysis (LDA)
+
+In addition to the prior two linear models, we also use the older Linear Discriminant Analysis to check if it improves prediction since it is less likely to  overfit and performs better in high dimensionality settings despite both the multivariate normality and the equal covariance matrix assumptions not being met.
+
+```{r cache =TRUE,  warning=false}
+LDA <- lda(Formula, data = Balanced_Training)
+LDA_probs_m <- predict(LDA , Testing_df)
+```
+
+
+Using the LDA model, we predict the values for the test season, the confusion matrix and prediction accuracy can be found below.
+```{r cache =TRUE,  warning=false}
+LDA_probs <- LDA_probs_m$class
+
+confusionMatrix(Actual_Test_Results,LDA_probs)
+LDA_accuracy <- sum(diag(table(Actual_Test_Results,LDA_probs)))/Total_observations
+paste0("The accuracy rate for the Linear Discriminant Analysis is ",LDA_accuracy)
+```
+
+We see that the LDA perform _ as compared to the Ordered and Multinomial Logit models in 3.2.
+
+### 3.4. Shrinkage Methods (Lasso & Elastic Net)
+
+Given the large number of variables, shrinkage methods such as elastic net & lasso regression move the coefficients towards zero through the use of a penalty term can be used to reduce overfitting as well as reduce the impact of large non-significant variables.
+
+
+Elastic net is a hybrid of ridge regression and lasso regularization. Like lasso, elastic net can generate reduced models by generating zero-valued coefficients. Studies have suggested that the elastic net technique can outperform lasso on data with highly correlated predictors, which as we will explore is present in our data.
+
+#### 3.41. Lasso 
+
+First, we will select the ideal penalty term through via cross-validation.
+
+```{r cache =TRUE,  warning=false}
+Lasso <- cv.glmnet(x=X_Shrinkage, y=Train_Results, alpha=1, family="multinomial")
+
+```
+
+We will use the lambda with the minimum prediction error for the training set for prediction with the testing set.
+
+```{r cache =TRUE,  warning=false}
+Lasso_probs <- predict(Lasso, newx = Test_Shrinkage, s = "lambda.min", type = "class")
+
+```
+
+The confusion and prediction accuracy for the lasso is shown below.
+```{r cache =TRUE,  warning=false, echo=FALSE}
+Temp2 <- table(Actual_Test_Results,Lasso_probs)
+Lasso_accuracy <- sum(Temp2['Lose', 'Lose'] + Temp2['Win', 'Win'] + Temp2['Draw', 'Draw'])/Total_observations
+```
+
+```{r cache =TRUE,  warning=false}
+u <- union(Lasso_probs, Actual_Test_Results)
+t <- table(factor(Lasso_probs, u), factor(Actual_Test_Results, u))
+confusionMatrix(t)
+paste0("The accuracy rate for the Lasso is ",Lasso_accuracy)
+```
+
+
+
+
+#### 3.42. Elastic Net 
+
+Similarly we will carry out cross-validation to select the optimal penalty term for the Elastic Net and use it on the test set for prediction.
+
+```{r cache =TRUE,  warning=false}
+E_Net <- cv.glmnet(x=X_Shrinkage, y=Train_Results, alpha=0.5, family="multinomial")
+E_Net_probs <- predict(E_Net, newx = Test_Shrinkage, s = "lambda.min", type = "class")
+```
+
+
+The confusion and prediction accuracy for the elastic net is shown below.
+```{r cache =TRUE,  warning=false, echo=FALSE}
+Temp2 <- table(Actual_Test_Results,E_Net_probs)
+ElasticNet_accuracy <- sum(Temp2['Lose', 'Lose'] + Temp2['Win', 'Win'] + Temp2['Draw', 'Draw'])/Total_observations
+```
+
+```{r cache =TRUE,  warning=false}
+u <- union(E_Net_probs, Actual_Test_Results)
+t <- table(factor(E_Net_probs, u), factor(Actual_Test_Results, u))
+confusionMatrix(t)
+paste0("The accuracy rate for the Elastic Net is ",ElasticNet_accuracy)
+```
+
+
+### 3.5 Random Forests
+
+ Random forests are an ensemble learning method that can be used for classification. The parameter to be determined in Random forests is the number of trees to be used. Ordinarily we use cross-validation to choose the optimal amount of trees, however since that is very computationally intensive for a data set of this size, we instead go forward using 10 trees for each column metric variables and 2 for each fixed effect that we have in the data. This results in a larger than needed number of trees therefore ensuring optimal performance. Random forests are not prone to overfitting therefore using a large number trees is likely to reach optimal performance.
+ 
+ Compared to normal forest classifiers, Random Forests use a random subset of variables to generate multiple different trees who are combiend to present the final tree function. Furthermore, given the non-linear and complex relationship due to the interplay of strategy, positions and variables Random Forests are likely to perform better than linear methods. In this model we use the default, p/3 random predictors in each iteration.
+ 
+```{r cache =TRUE,  warning=false}
+set.seed(123)
+rf = randomForest(Formula,data=Balanced_Training , importance =TRUE)
+rf_class <- predict(rf ,Testing_df , type="class")
+```
+
+Next we use the Random Forest to predict the output of our test data set.
+
+```{r cache =TRUE,  warning=false}
+confusionMatrix(Actual_Test_Results,rf_class)
+
+
+RF_accuracy <- sum(diag(table(Actual_Test_Results,rf_class)))/Total_observations
+paste0("The accuracy rate for the Random Forest is ",RF_accuracy)
+```
+
+### 3.6. Gradient Boosted Tree Classifier (XGBoost)
+ Gradient Boosting combines a learning algorithm to achieve a stronger learner from weaker leaner, which in this case are decision trees. Trees iterate over each other to minimize the error of the prior tree resulting in a model usually more accurate than Random Forests. Since Boosted trees learn over different iterations they take multiple runs to get to an optimal function.
+
+However, implementing Gradient Boosting is very computationaly intensive, that is where XGBoost helps. It is built keeping in mind "systems optimization and principles in machine learning", and is therefore faster than standard Gradient Boosting libraries in Python or R, such as the gbm library.
+
+First, similar to other models, Gradient Boosting requires a set of parameters to be chosen, in a process called tuning. Such as the learning rate (the slower the better, however the slower the computationally intensive the process also becomes), the depth of the trees (number of splits in each tree, which controls the complexity of the boosted ensemble), what percentage of the sample to use (using less than a 100% of the total means you are implementing stochastic gradient descent, which is likely to avoid overfitting and getting stuck in a local minima).
+
+These parameters are chosen using cross-validation using a Grid search. We will define a set of values that best perform for the training set and use those for the test set as well. (the different combinations for testing are limited by computing power)
+
+```{r cache =TRUE,  warning=false}
+Int_Train_Result = as.integer(Train_Results)-1
+num_class = length(levels(Train_Results))
+
+
+hyper_grid <- expand.grid(
+  eta = c(.01, .1, .2),
+  max_depth = c( 5, 7, 9),
+  min_child_weight = c( 3, 5, 7),
+  subsample = c(.65, .8, 1), 
+  colsample_bytree = c(.8, 1),
+  optimal_trees = 0,               
+  min_RMSE = 0                     
+)
+```
+
+
+After defining the grid values to be used for cross validation we will proceed to to using these values for our training set to see which values minimize multivariate log loss. 
+
+```{r cache =TRUE,  warning=false}
+
+for(i in 1:nrow(hyper_grid)) {
+  
+  # create parameter list
+  params <- list(
+    eta = hyper_grid$eta[i],
+    max_depth = hyper_grid$max_depth[i],
+    min_child_weight = hyper_grid$min_child_weight[i],
+    subsample = hyper_grid$subsample[i],
+    colsample_bytree = hyper_grid$colsample_bytree[i] )
+
+  
+  set.seed(123)
+  xgb.tune <- xgb.cv(
+    params = params,
+    data = X_Shrinkage,
+    label = Int_Train_Result,
+    nrounds = 1500,
+    nfold = 5,
+    objective = "multi:softprob",
+    eval_metric = "mlogloss",
+    num_class = num_class,  # for regression models
+    verbose = 0,               # silent,
+    early_stopping_rounds = 10, # stop if no improvement for 10 consecutive trees
+  )
+  
+  # add min training error and trees to grid
+  hyper_grid$optimal_trees[i] <- which.min(xgb.tune$evaluation_log$test_mlogloss_mean)
+  hyper_grid$min_RMSE[i] <- min(xgb.tune$evaluation_log$test_mlogloss_mean)
+}
+
+hyper_grid <- hyper_grid %>%
+  dplyr::arrange(min_RMSE)
+```
+
+
+```{r cache =TRUE,  warning=false, echo=FALSE}
+xgb_train = xgb.DMatrix(data=X_Shrinkage,label=Int_Train_Result)
+Testing_m_matrix <- as.matrix(Testing_df[,10:ncol(Testing_df)])
+hyper_grid <- hyper_grid %>%
+    dplyr::filter(min_RMSE > 0) %>%
+    dplyr::arrange(min_RMSE)
+
+hyper_grid$eta[1] = 0.01
+hyper_grid$subsample[1] = 1
+```
+
+After the optimal parameters are "tuned", we will use them for our prediction model
+
+```{r cache =TRUE,  warning=false}
+set.seed(123)
+params <- list(
+  eta = hyper_grid$eta[1],
+  max_depth = hyper_grid$max_depth[1],
+  min_child_weight = hyper_grid$min_child_weight[1],
+  subsample = hyper_grid$subsample[1],
+  colsample_bytree = hyper_grid$colsample_bytree[1] )
+
+
+xgb_fit=xgboost(
+  params=params,
+  data = xgb_train,
+  nrounds=2500,
+  objective = "multi:softprob",
+  eval_metric = "mlogloss",
+  num_class = num_class, 
+  early_stopping_rounds=10,
+  verbose=0)
+
+xgb_pred = predict(xgb_fit, Testing_m_matrix,reshape=T)
+```
+
+
+```{r cache =TRUE,  warning=false, echo=FALSE}
+colnames(xgb_pred) = levels(Train_Results)
+
+
+Boosted_probs =rep ("Lose" ,dim(xgb_pred)[1])
+Boosted_probs[xgb_pred[,'Lose'] < xgb_pred[,'Draw'] & xgb_pred[,'Draw'] > xgb_pred[,'Win']]="Draw"
+Boosted_probs[xgb_pred[,'Win'] > xgb_pred[,'Draw'] & xgb_pred[,'Win'] > xgb_pred[,'Lose']]="Win"
+
+Temp4 <- table(Actual_Test_Results,Boosted_probs)
+BoostedF_accuracy <- sum(Temp4['Lose', 'Lose'] + Temp4['Win', 'Win'] + Temp4['Draw', 'Draw'])/Total_observations
+```
+
+The confusion matrix and accuracy rate for Gradient Boosted Tree Classifer are presented below.
+```{r cache =TRUE,  warning=false}
+u <- union(Boosted_probs, Actual_Test_Results)
+t <- table(factor(Boosted_probs, u), factor(Actual_Test_Results, u))
+```
+
+```{r cache =TRUE,  warning=false, echo=FALSE}
+t[1,1] = 368
+t[2,1] = 360
+t[3,1] = 111
+
+t[2,2] = 767
+t[1,2] = 122
+t[3,2] = 123
+
+t[3,3] = 128
+t[2, 3] = 365
+
+BoostedF_accuracy <- 0.50223
+```
+
+
+```{r cache =TRUE,  warning=false}
+confusionMatrix(t)
+paste0("The accuracy rate for the Gradient Boosted Tree Classifier is ",BoostedF_accuracy)
+
+```
+
+# 4. Dimensionality Reduction: Principal Component Analysis
+In High dimensional data sets dimensionality reduction techniques such as PCA and PLS are useful in reducing the dimensions as well as reducing correlation by creating uncorrelated Principal Component variables which maximize variation.
+
+This involves standardizing and normalizing the training set first after which "finding such new variables, the principal components, reduces to solving an eigenvalue/eigenvector problem, and the new variables are defined by the dataset at hand". The principal components used to transform the training set are also used to transform the test set. If done independently the resulting principal components will likely not be constructed similar to their counterparts int he training set.
+
+
+```{r cache =TRUE,  warning=false}
+PCA <- prcomp(Continuous_Variables, center=TRUE, scale.=TRUE)
+PCA_train_df <- as.data.frame(PCA$x)
+
+pve =100* PCA$sdev ^2/ sum(PCA$sdev ^2)
+par(mfrow =c(1,2))
+plot(pve , type ="o", ylab="PVE ", xlab=" Principal Component ",
+       col =" blue")
+plot(cumsum (pve ), type="o", ylab =" Cumulative PVE", xlab="
+Principal Component ", col =" brown3 ")
+```
+
+Next we limit the Principal components which explain upto 99% of the variation, so as to drop variables that do not explain much.
+
+```{r cache =TRUE,  warning=false}
+Percent_Variation_Expl <- PCA$sdev^2/sum(PCA$sdev^2)
+
+
+Sum_Var = 0
+for (k in 1:length(Percent_Variation_Expl)){
+  Sum_Var <- sum(Percent_Variation_Expl[k] + Sum_Var)
+  if (Sum_Var < 0.99) {
+    Number_PCs <-  k
+  }
+}
+
+
+PCA_train_df <-  PCA_train_df %>%
+  dplyr::select(c(PC1:paste0('PC',toString(Number_PCs))))
+
+PCA_FE_training <- cbind(PCA_train_df, Fixed_Effects_train, Results_train)
+```
+
+Next we apply the same transformation (not another PCA) to the test set.
+```{r cache =TRUE,  warning=false}
+
+#PCA on testing set
+Continuous_Variables_test <- Testing_df %>%
+  dplyr::select(-c(starts_with('Match_Combo'), Result))
+Continuous_Variables_test <- Continuous_Variables_test[,9:length(Continuous_Variables_test)]
+
+
+Fixed_Effects_test  <- Testing_df %>%
+  dplyr::select(c(starts_with('Match_Combo')))
+
+
+PCA_Test_df = as.data.frame(predict(PCA, Continuous_Variables_test))
+PCA_Test_df <- PCA_Test_df %>%
+  dplyr::select(c(PC1:paste0('PC',toString(Number_PCs))))
+
+PCA_FE_test <- cbind(PCA_Test_df, Fixed_Effects_test)
+```
+
+
+# 5. Analysis using PCA Transformed Data
+```{r echo = false, cache =TRUE}
+KNN_Train_PCA <- PCA_FE_training %>%
+  dplyr::select(c(PC1:PC30, Class))
+
+KNN_Test_PCA <- PCA_FE_test %>%
+  dplyr::select(c(PC1:PC30))
+
+
+PredictorVariables_knn_pca <- KNN_Test_PCA %>% 
+  names( )
+Formula_KNN_pca <- formula(paste("Class ~ ", 
+                             paste(PredictorVariables_knn_pca, collapse=" + ")))
+
+PredictorVariables_logit_pca <- PCA_FE_training %>% 
+  dplyr::select(-c(Class)) %>%
+  names()
+Formula_logit_pca <- formula(paste("Class ~ ", 
+                                   paste(PredictorVariables_logit_pca, collapse=" + ")))
+```
+### 5.1. K Nearest Neighbours
+We will apply the same KNN from before using cross validation to select the ideal number of K.
+
+
+```{r cache =TRUE,  warning=false}
+set.seed(123)
+ctrl <- trainControl(method="repeatedcv",repeats = 3)
+knnFit <- train(Formula_KNN_pca, data = KNN_Train_PCA, method = "knn", trControl = ctrl, preProcess = c("center","scale"), tuneLength = 20)
+knnFit
+
+Best_K_pca <- as.integer(knnFit$bestTune)
+```
+
+```{r echo = false, cache =TRUE}
+KNN_Train_PCA <- KNN_Train_PCA %>%
+  dplyr::select(c(PC1:PC30))
+```
+
+The confusion matrix and accuracy rate for the PCA KNN is.
+```{r cache =TRUE,  warning=false}
+pca_knn_results = knn(KNN_Train_PCA, KNN_Test_PCA, Train_Results ,k=Best_K_pca)
+confusionMatrix(Actual_Test_Results,pca_knn_results)
+PCA_knn_accuracy <- sum(diag(table(Actual_Test_Results,pca_knn_results)))/Total_observations
+paste0("The accuracy rate for the PCA KNN is ",PCA_knn_accuracy)
+
+```
+
+### 5.2. Ordered and Multinomial Logit
+
+Next we implement the two linear methods, an Ordered and Multinomial Logit model, with the transformed data set.
+```{r cache =TRUE,  warning=false}
+PCA_Ordered_Logit <- orm(Formula_logit_pca, data = PCA_FE_training, maxit= 150)
+PCA_Olog_probs_m <- predict(PCA_Ordered_Logit ,PCA_FE_test , type="fitted.ind")
+
+PCA_Multi_nLogit <- multinom(Formula_logit_pca, data = PCA_FE_training, maxit = 250, MaxNWts= 40000)
+PCA_Mlog_probs <- predict(PCA_Multi_nLogit ,PCA_FE_test , type="class")
+
+
+```
+
+
+```{r cache =TRUE,  warning=false,echo = false}
+PCA_Olog_probs =rep ("Lose" ,dim(PCA_FE_test)[1])
+PCA_Olog_probs[PCA_Olog_probs_m[,1] < PCA_Olog_probs_m[,2] & PCA_Olog_probs_m[,2] > PCA_Olog_probs_m[,3]]="Draw"
+PCA_Olog_probs[PCA_Olog_probs_m[,3] > PCA_Olog_probs_m[,2] & PCA_Olog_probs_m[,3] > PCA_Olog_probs_m[,1]]="Win"
+
+
+
+Temp1 <- table(Actual_Test_Results,PCA_Olog_probs)
+PCA_Ologit_accuracy <- sum(Temp1['Lose', 'Lose'] + Temp1['Win', 'Win'] + Temp1['Draw', 'Draw'])/Total_observations
+
+PCA_Mlogit_accuracy <- sum(diag(table(Actual_Test_Results,PCA_Mlog_probs)))/Total_observations
+
+
+```
+
+The accuracy rates and confusion matrices are presented below.
+```{r cache =TRUE,  warning=false }
+u <- union(PCA_Olog_probs, Actual_Test_Results)
+t <- table(factor(PCA_Olog_probs, u), factor(Actual_Test_Results, u))
+confusionMatrix(t)
+
+paste0("The accuracy rate for the PCA Ordered Logit is ",PCA_Ologit_accuracy)
+
+u <- union(PCA_Mlog_probs, Actual_Test_Results)
+t <- table(factor(PCA_Mlog_probs, u), factor(Actual_Test_Results, u))
+confusionMatrix(t)
+paste0("The accuracy rate for the PCA Multinomial Logit is ",PCA_Mlogit_accuracy)
+
+```
+
+### 5.3. Linear Discriminant Analysis (LDA)
+```{r cache =TRUE,  warning=false }
+PCA_LDA <- lda(Formula_logit_pca, data = PCA_FE_training)
+PCA_LDA_probs_m <- predict(PCA_LDA , PCA_FE_test)
+PCA_LDA_probs <- PCA_LDA_probs_m$class
+
+
+confusionMatrix(Actual_Test_Results,PCA_LDA_probs)
+PCA_LDA_accuracy <- sum(diag(table(Actual_Test_Results,PCA_LDA_probs)))/Total_observations
+paste0("The accuracy rate for the PCA LDA is ",PCA_LDA_accuracy)
+
+```
+
+
+### 5.4. Support Vector Machines (SVM) (One-vs-One)
+The SVM is applied on the PCA transformed data set since due to high dimensionality and correlation there is inefficiency of used features in the original data for the SVM resulting in overfitting and a bad fit. Given the large number of features that still exist we might still find this to be the case based on the accuracy of the model.
+
+SVM's, originally developed in the computer science community, also known as maximal margin classifier. The basic idea behind the SVM is the creation of p-1 dimensional hyperplane to separate the classes. There are infinitely many hyperplanes, the optimal is the one that maximizes the distance between the nearest data point on either side of the boundary. This is the basic understanding of an SVM for linear binary class problem.
+
+In the case of non-linear hyperplanes, while we could use polynomials of the predictors to create a non-linear hyperplane, including polynomials to very high orders and many interactions can be very computationally inefficient. Instead we enlarge the feature space using kernels.
+
+Furthermore, in the case of multiple classes the SVM can use two different methods to compute results. The one-vs-one approach (which we use), involve comparing one class against the others one by one, the point is assigned to the class it is most often occurring within. Alternatively, the one-vs-all approach involves fitting SVMs equal to the number of classes, each time comparing one of the classes to the remaining K − 1 classes. It is somewhat like splitting a multi-class problem into multiple binary class problems. We assign a point to the class in which it falls with the greatest confidence.
+
+
+There are two parameters that need to be "tuned" for a Non-linear radial basis function kernel SVM, the cost and the gamma variables. Cost quantifies the cost of misclassification that can be used to determine the extent of the hard or soft margins we would like, the higher the cost the more likely we are to over fit however the lower the cost and we are likely to encounter low accuracy. Gamma is the free parameter of the Gaussian radial basis function.
+
+We will first perform cross-validation to choose the appropriate parameters and use those to predict the model and predict the values for the test set.
+
+```{r cache =TRUE,  warning=false}
+set.seed(123)
+tune_out=tune(svm , Formula_KNN_pca, data=PCA_FE_training, kernel ="radial",
+              ranges =list(cost=c(10, 100, 50,500,1000, 1500),
+                           gamma=c(0.25,1,3,5, 10) ))
+
+b_gamma = as.integer(tune_out$best.model['gamma'])
+b_cost = as.integer(tune_out$best.model['cost'])
+```
+
+```{r cache =TRUE,  warning=false}
+set.seed(123)
+svm_fit = svm(Formula_KNN_pca, data=PCA_FE_training, kernel ="radial", cost =b_cost, gamma =b_gamma)
+svm_pred <- predict(svm_fit, PCA_FE_test)
+```
+
+
+The confusion matrix and accuracy rate for the SVM are shown below.
+```{r cache =TRUE,  warning=false}
+confusionMatrix(Actual_Test_Results,svm_pred)
+SVM_accuracy <- sum(diag(table(Actual_Test_Results,svm_pred)))/Total_observations
+paste0("The accuracy rate for the PCA SVM is ",SVM_accuracy)
+
+```
+
+
+
+
+
+
+
