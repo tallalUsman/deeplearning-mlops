@@ -25,4 +25,4 @@ df1 = (df.select(col("parameters").alias("fixture_date"), explode(col("response"
         .drop('col'))
 
 
-df1.write.format("delta").mode("overwrite").saveAsTable("fixture")
+df1.write.format("parquet").mode("overwrite").saveAsTable("bronze_fixture")
