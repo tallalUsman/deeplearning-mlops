@@ -3,7 +3,7 @@ from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.getOrCreate()
 
-input_dir = "gs://football_data_api/raw/fixtures/2014-08-*/"
+input_dir = "gs://football_data_api/raw/fixtures/*/"
 
 # Load the entire file as a single record
 json = spark.sparkContext.wholeTextFiles(input_dir).values()
@@ -25,4 +25,4 @@ df1 = (df.select(col("parameters").alias("fixture_date"), explode(col("response"
         .drop('col'))
 
 
-df1.write.format("parquet").mode("overwrite").saveAsTable("bronze_fixture")
+df1.write.format("parquet").mode("overwrite").saveAsTable("football.bronze_fixture")
