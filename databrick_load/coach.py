@@ -3,7 +3,7 @@ from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.getOrCreate()
 
-input_dir = "gs://football_data_api/raw/coach/"
+input_dir = "gs://football_data_api/raw/coach/*/"
 
 # Load the entire file as a single record
 json = spark.sparkContext.wholeTextFiles(input_dir).values()
