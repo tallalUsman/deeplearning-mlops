@@ -16,7 +16,7 @@ FROM {{ ref('silver_fixture_stat') }}
 INNER JOIN fixture_dates
     USING (fixture_id)
 INNER JOIN standing
-    ON standing.team_id = silver_fixture_stat.team_id AND fixture_dates.season = (standing.season - 1)
+    ON standing.team_id = silver_fixture_stat.team_id AND (fixture_dates.season- 1) = standing.season
 ORDER BY team_id, fixture_date
 )
 
