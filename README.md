@@ -1,26 +1,25 @@
 # Introduction: Cloud-native Deep Learning MLOps Pipeline
-## 1. Pipeline and Infra
 
-### 1.11. Football Data
+## 1.1. Pipeline and Infra
 Data is gathered from  ((https://www.api-football.com/), using API pulls.
 
 ### 1.12. Infrastructure
 The project is hosted entirely in cloud-native environments. The entire pipeline is automated and meant to automatically pull data once new data becomes available for past matches.
 
-#### 1.121 Environment and CI/CD:
+### 1.13 Environment and CI/CD:
 GitHub and Github actions to build docker images in Google Cloud Artifact Registry.
 
-#### 1.122 Extractor:
+### 1.14 Extractor:
 Using Go to extract data from the API above using channels to pull relevant data with greater speed than traditional Python extractor.
 These images were deployed to Cloud Run on GCP.
 
-#### 1.123 Load:
+### 1.15 Load:
 Use PySpark to load the data tables into Databricks Hive.
 
-#### 1.124 Transform:
+#### 1.16 Transform:
 Use dbt and SQl on Databricks to transform said data tables into appropriate forms for Deep and Machine learning.
 
-#### 1.124 Deep Learning:
+### 1.17 Deep Learning:
 Use Databricks hosted jupyter notebook to run deep learning and machine learning models.
 
 ## 2. Background
@@ -38,13 +37,13 @@ The project also assesses the importance of the dynamics of the game in recent y
 While there are ways of controlling for the strategy they require more detailed non-public data and more computationally intensive techniques which we will discuss in detail later on.
 
 
-# 2. The Results
+## 3. The Results
 
 We use techniques ranging from Multinomial Logit to Lasso regression to more complex and computationally intensive techniques such as Random Forests. 
 Our results show that the Boosted Trees model achieves the greatest accuracy.
 
-However, one consistent pattern illustrated in all implemented ML techniques shows that the models have more difficulty accurately predicting a draw as compared to a win or a loss. This might be explained by the fact that draws themselves are a product idiosyncrasies or team strategies to "park the bus" (only play defensive) in the face of a far stronger opponent. 
+However, one consistent pattern illustrated in all implemented ML techniques shows that the models have more difficulty accurately predicting a draw as compared to a win or a loss. This might be explained by the fact that draws themselves are a product of idiosyncrasies or team strategies to "park the bus" (only play defensive) in the face of a far stronger opponent. 
 
-Several football strategies such as playing on the counter, meaning that strong teams can draw with teams that anticipate they have little probability of wining using usual strategies therefore heavily rely on defense to secure a draw. Therefore we are likely to see a clear win/loss in teams that are closely matched in terms of metrics however if there exists an imbalance in the strength of the teams we might see a draw with greater likelihood as compared to a match with closely matched teams.
+Several football strategies such as playing on the counter, mean that strong teams can draw with teams that anticipate they have little probability of winning using usual strategies and therefore heavily rely on defense to secure a draw. Therefore we are likely to see a clear win/loss in teams that are closely matched in terms of metrics however if there exists an imbalance in the strength of the teams we might see a draw with greater likelihood as compared to a match with closely matched teams.
 
-The results show that without the deficiency of draw predictions our models do far better for loses and wins as compared to draw. For instance the Boosted trees predict wins by an accuracy of 75%!
+The results show that without the deficiency of draw predictions, our models do far better for loses and wins as compared to draw. For instance, the Boosted trees predict wins by an accuracy of 75%!
