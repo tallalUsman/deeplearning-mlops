@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: football
+    database: raw  
+    schema: football  
+    tables:
+      - name: bronze_fixture
+      - name: bronze_standings
+      - name: bronze_fixture_stat
+      - name: bronze_coach
