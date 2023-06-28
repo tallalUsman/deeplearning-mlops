@@ -17,7 +17,7 @@ These images were deployed to Cloud Run on GCP.
 Use PySpark to load the data tables into Databricks Hive.
 
 ### 1.16 Transform:
-Use dbt and SQl on Databricks to transform said data tables into appropriate forms for Deep and Machine learning.
+Use dbt and SQL on Databricks cluster to transform and feature engineer said data tables into appropriate data for Deep and Machine learning.
 
 ### 1.17 Deep Learning:
 Use Databricks hosted jupyter notebook to run deep learning and machine learning models.
