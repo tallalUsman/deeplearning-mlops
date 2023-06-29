@@ -19,8 +19,10 @@ SELECT silver_fixture.*
 , (away.fouls_avg/home.fouls_avg) AS fouls_r
 , (away.pass_accuracy_avg/home.pass_accuracy_avg) AS pass_accuracy_r
 FROM {{ ref('silver_fixture') }}
-LEFT JOIN team_lvl away
+INNER JOIN team_lvl away
 ON silver_fixture.fixture_id = away.fixture_id AND silver_fixture.away_team_id = away.team_id 
-LEFT JOIN team_lvl home
+INNER JOIN team_lvl home
 ON silver_fixture.fixture_id = home.fixture_id AND silver_fixture.home_team_id = home.team_id 
+INNER JOIN {{ ref('silver_coach') }} away
+ON silver_coach.team_id = silver_fixture.away_team_id  AND silver_fixture.fixture_date BETWEEN silver_coach.start_date AND silver_coach.calc_end_date
 WHERE (away.total_shots_avg/home.total_shots_avg) IS NOT NULL
