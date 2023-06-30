@@ -19,6 +19,9 @@ Use PySpark to load the data tables into Databricks Hive.
 ### 1.16 Transform:
 Use dbt and SQL on Databricks cluster to transform and feature engineer said data tables into appropriate data for Deep and Machine learning.
 
+![alt text](https://github.com/tallalUsman/deeplearning-mlops/blob/main/pic/dag.png?raw=true)
+
+
 ### 1.17 Deep Learning:
 Use Databricks hosted jupyter notebook to run deep learning and machine learning models.
 
