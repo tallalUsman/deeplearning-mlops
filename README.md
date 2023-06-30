@@ -22,7 +22,7 @@ Use dbt and SQL on Databricks cluster to transform and feature engineer said dat
 ![alt text](https://github.com/tallalUsman/deeplearning-mlops/blob/main/pic/dag.png?raw=true)
 
 
-### 1.17 Deep Learning:
+### 1.17 Deep Learning and Machine Learning:
 Use Databricks hosted jupyter notebook to run deep learning and machine learning models.
 
 ## 2. Background
