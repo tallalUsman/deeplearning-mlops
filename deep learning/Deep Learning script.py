@@ -35,7 +35,6 @@ spark = SparkSession.builder.getOrCreate()
 # Read a table into a Spark DataFrame
 spark_df = spark.table("football.gold_dl_table")
 
-
 # COMMAND ----------
 
 # MAGIC %md
@@ -44,19 +43,31 @@ spark_df = spark.table("football.gold_dl_table")
 # COMMAND ----------
 
 # List of categorical columns to encode
-categorical_cols = ['coach_id_home', 'league_id', 'season', 'coach_id_away']
+categorical_cols = ["coach_id_home", "league_id", "season", "coach_id_away"]
 
 # Loop through categorical columns and apply StringIndexer
 for col in categorical_cols:
-    indexer = StringIndexer(inputCol=col, outputCol=col+"Index")
+    indexer = StringIndexer(inputCol=col, outputCol=col + "Index")
     spark_df = indexer.fit(spark_df).transform(spark_df)
 
 # COMMAND ----------
 
-spark_df = spark_df.drop('fixture_date', 'fixture_id', 'referee', 'venue_id', 'status', 'away_team_id', 'home_team_id', 'match_result', 'coach_id_home', 'coach_id_away','league_id', 'season')
+spark_df = spark_df.drop(
+    "fixture_date",
+    "fixture_id",
+    "referee",
+    "venue_id",
+    "status",
+    "away_team_id",
+    "home_team_id",
+    "match_result",
+    "coach_id_home",
+    "coach_id_away",
+    "league_id",
+    "season",
+)
 
 spark_df = spark_df.dropna()
-
 
 # COMMAND ----------
 
@@ -74,30 +85,35 @@ pandas_df.head(5)
 
 # COMMAND ----------
 
-targets1 = pandas_df['away_goals'].values.flatten()
-targets2 = pandas_df['home_goals'].values.flatten()
+targets1 = pandas_df["away_goals"].values.flatten()
+targets2 = pandas_df["home_goals"].values.flatten()
 
-features = pandas_df.drop(['away_goals', 'home_goals'], axis=1).values
+features = pandas_df.drop(["away_goals", "home_goals"], axis=1).values
 
 # COMMAND ----------
 
-test_size = int(.10 * 22603) # represents size of validation set
+test_size = int(0.08 * 22603)  # represents size of validation set
 val_size = test_size
-train_size = 22603 - test_size*2
-train_size , val_size, test_size
+train_size = 22603 - test_size * 2
+train_size, val_size, test_size
 
 # COMMAND ----------
 
-dataset = torch.utils.data.TensorDataset(torch.tensor(features).float(), torch.tensor(targets1).unsqueeze(-1), torch.tensor(targets2).unsqueeze(-1))
+dataset = torch.utils.data.TensorDataset(
+    torch.tensor(features).float(),
+    torch.tensor(targets1).unsqueeze(-1),
+    torch.tensor(targets2).unsqueeze(-1),
+)
 train_ds, val_ds, test_ds = random_split(dataset, [train_size, val_size, test_size])
 batch_size = 256
 
-
 # COMMAND ----------
 
-train_loader = DataLoader(train_ds, batch_size, shuffle=True, num_workers=4, pin_memory=False)
-val_loader = DataLoader(val_ds, batch_size*2, num_workers=4, pin_memory=False)
-test_loader = DataLoader(test_ds, batch_size*2, num_workers=4, pin_memory=False)
+train_loader = DataLoader(
+    train_ds, batch_size, shuffle=True, num_workers=4, pin_memory=False
+)
+val_loader = DataLoader(val_ds, batch_size * 2, num_workers=4, pin_memory=False)
+test_loader = DataLoader(test_ds, batch_size * 2, num_workers=4, pin_memory=False)
 
 # COMMAND ----------
 
@@ -122,6 +138,8 @@ output_size = 1
 # COMMAND ----------
 
 output_size = 1
+
+
 class FootballModelMk2(nn.Module):
     def __init__(self, input_size, output_size):
         super().__init__()
@@ -142,11 +160,10 @@ class FootballModelMk2(nn.Module):
         out2 = self.fc3_2(x)  # prediction for target2
         return out1, out2
 
-
 # COMMAND ----------
 
-crit = nn.L1Loss() #criterion
-opt_func = torch.optim.SGD #optimizer function (w/o params or lr)
+crit = nn.L1Loss()  # criterion
+opt_func = torch.optim.SGD  # optimizer function (w/o params or lr)
 
 # COMMAND ----------
 
@@ -159,11 +176,17 @@ def fit(epochs, lr, model, train_loader, val_loader, crit, opt_func, device):
         # training per epoch (iterate through each batch)
         for inputs, target1, target2 in train_loader:
             # put inputs to the same device as model (GPU or CPU)
-            inputs, target1, target2 = inputs.to(device), target1.to(device), target2.to(device)
+            inputs, target1, target2 = (
+                inputs.to(device),
+                target1.to(device),
+                target2.to(device),
+            )
             # using optimizer & loss
             opt.zero_grad()
             (outs1, outs2), (loss1, loss2) = step(inputs, target1, target2, model, crit)
-            loss = loss1 + loss2  # consider if this is the appropriate way to handle multiple losses
+            loss = (
+                loss1 + loss2
+            )  # consider if this is the appropriate way to handle multiple losses
             loss.backward()
             opt.step()
         # evaluate model on validation set every epoch
@@ -173,6 +196,7 @@ def fit(epochs, lr, model, train_loader, val_loader, crit, opt_func, device):
             print(f'Epoch #{epoch + 1} ==> Val Loss: {val_results["avg_loss"]}')
         history.append(val_results)
     return history
+
 
 def evaluate(model, loader, crit, device):
     losses = []
@@ -184,9 +208,17 @@ def evaluate(model, loader, crit, device):
     with torch.no_grad():
         # looping over data loader
         for inputs, target1, target2 in train_loader:
-            inputs, target1, target2 = inputs.to(device), target1.to(device), target2.to(device)
-            (outs1, outs2), (loss1, loss2) = step(inputs, target1, target2, model, crit, evaluate=True)
-            loss = loss1 + loss2  # consider if this is the appropriate way to handle multiple losses
+            inputs, target1, target2 = (
+                inputs.to(device),
+                target1.to(device),
+                target2.to(device),
+            )
+            (outs1, outs2), (loss1, loss2) = step(
+                inputs, target1, target2, model, crit, evaluate=True
+            )
+            loss = (
+                loss1 + loss2
+            )  # consider if this is the appropriate way to handle multiple losses
             losses.append(loss.item())
             acc1 = ((outs1 - target1).abs() <= tol).float().mean()
             acc2 = ((outs2 - target2).abs() <= tol).float().mean()
@@ -194,7 +226,8 @@ def evaluate(model, loader, crit, device):
 
     avg_loss = sum(losses) / len(losses)
     avg_acc = sum(accuracies) / len(accuracies)  # compute average "accuracy"
-    return {'avg_loss': avg_loss, 'avg_acc': avg_acc}
+    return {"avg_loss": avg_loss, "avg_acc": avg_acc}
+
 
 # function to input features into model (used for training + validation)
 def step(inputs, target1, target2, model, crit, evaluate=False):
@@ -202,7 +235,6 @@ def step(inputs, target1, target2, model, crit, evaluate=False):
     loss1 = crit(outs1, target1)
     loss2 = crit(outs2, target2)
     return (outs1, outs2), (loss1, loss2)
-
 
 # COMMAND ----------
 
@@ -212,9 +244,9 @@ def step(inputs, target1, target2, model, crit, evaluate=False):
 # COMMAND ----------
 
 if torch.cuda.is_available():
-    device = torch.device('cuda')
+    device = torch.device("cuda")
 else:
-    device = torch.device('cpu')
+    device = torch.device("cpu")
 
 # COMMAND ----------
 
@@ -225,7 +257,6 @@ device
 model = FootballModelMk2(input_size, output_size).to(device)
 model
 
-
 # COMMAND ----------
 
 # MAGIC %md
@@ -235,18 +266,19 @@ model
 
 import matplotlib.pyplot as plt
 
+
 def visualize(hist, acc=False):
-    losses = [x['avg_loss'] for x in hist]
-    accs = [x['avg_acc'] for x in hist]
+    losses = [x["avg_loss"] for x in hist]
+    accs = [x["avg_acc"] for x in hist]
     if acc:
         plt.plot(accs)
-        plt.ylabel('Accuracy (%)')
-        plt.title('Accuracy over Epochs')
+        plt.ylabel("Accuracy (%)")
+        plt.title("Accuracy over Epochs")
     else:
         plt.plot(losses)
-        plt.ylabel('Losses')
-        plt.title('Losses over Epochs')
-    plt.xlabel('Epochs')
+        plt.ylabel("Losses")
+        plt.title("Losses over Epochs")
+    plt.xlabel("Epochs")
     plt.show()
 
 # COMMAND ----------
@@ -256,7 +288,7 @@ def visualize(hist, acc=False):
 
 # COMMAND ----------
 
-before_train = evaluate(model, test_loader, crit, device)
+before_train = evaluate(model, train_loader, crit, device)
 before_train
 
 hist = [evaluate(model, val_loader, crit, device)]
@@ -267,7 +299,7 @@ hist += fit(25, 1e-3, model, train_loader, val_loader, crit, opt_func, device)
 
 # COMMAND ----------
 
-hist += fit(50, 1e-4, model, train_loader, val_loader, crit, opt_func,device)
+hist += fit(50, 1e-4, model, train_loader, val_loader, crit, opt_func, device)
 
 # COMMAND ----------
 
@@ -278,8 +310,6 @@ after_train
 
 visualize(hist)
 
-
 # COMMAND ----------
 
 visualize(hist, acc=True)
-
