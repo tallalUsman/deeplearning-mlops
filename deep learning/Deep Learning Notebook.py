@@ -13,7 +13,10 @@ from pyspark.sql import SparkSession
 import pyspark.pandas as ps
 from pyspark.ml.feature import StringIndexer
 
-
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import random_split, TensorDataset, DataLoader
 
 # COMMAND ----------
 
@@ -21,7 +24,6 @@ from pyspark.ml.feature import StringIndexer
 # MAGIC ## Create Spark Dataframe and apply transformations
 
 # COMMAND ----------
-
 
 # Create a Spark session
 spark = SparkSession.builder.getOrCreate()
@@ -52,3 +54,107 @@ spark_df = spark_df.drop('fixture_date', 'fixture_id', 'referee', 'venue_id', 's
 # COMMAND ----------
 
 spark_df.show(10)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Create Training and Testing Set
+
+# COMMAND ----------
+
+train_df, test_df = spark_df.randomSplit([0.7, 0.3], seed=42)
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Setup PyTorch Model
+
+# COMMAND ----------
+
+input_size = 15
+output_size = 2
+
+# COMMAND ----------
+
+class LOLModelmk2(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(input_size, 64)
+        self.fc2 = nn.Linear(64, 32)
+        self.fc3 = nn.Linear(32, 16)
+        self.fc4 = nn.Linear(16, output_size)
+        
+    def forward(self, x):
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        x = F.relu(x)
+        x = self.fc3(x)
+        x = F.relu(x)
+        x = self.fc4(x)
+        return x
+
+# COMMAND ----------
+
+crit = F.cross_entropy #criterion
+opt_func = torch.optim.SGD #optimizer function (w/o params or lr)
+
+# COMMAND ----------
+
+def fit(epochs, lr, model, train_loader, val_loader):
+    h = []
+    # define optimizer
+    opt = opt_func(model.parameters(), lr=lr)
+    # loop for num of epochs
+    for epoch in range(epochs):
+        # training per epoch (iterate tru each batch)
+        for inputs, labels in train_loader:
+            # put inputs to gpu (explained later)
+            inputs, labels = inputs.to(device), labels.to(device)
+            # using optimizer & loss
+            opt.zero_grad()
+            _, loss = step(inputs, labels)
+            loss.backward()
+            opt.step()
+        # evaluate model on validation set every epoch
+        val_results = evaluate(model, val_loader)
+        # printing as output every 5 epochs
+        if (epoch + 1) % 5 == 0 or (epoch + 1) == epochs:
+            print(f'Epoch #{epoch + 1} ==> Val Loss: {val_results["avg_loss"]} | Val Acc: {val_results["avg_acc"]}')
+        h.append(val_results)
+    return h
+        
+def evaluate(model, loader):
+    losses = []
+    accs = []
+    # tracking gradient not needed
+    with torch.no_grad():
+        # looping over data loader
+        for inputs, labels in loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outs, loss = step(inputs, labels, evaluate=True)
+            # computing accuracy (function below)
+            acc = accuracy(outs, labels)
+            losses.append(loss)
+            accs.append(acc)
+    # avg loss + acc for all data on loader
+    avg_loss = sum(losses) / len(losses)
+    avg_acc = sum(accs) / len(accs)
+    return {'avg_loss':avg_loss, 'avg_acc':avg_acc}
+            
+# function to input features into model (used for training + validation)
+def step(inputs, labels, evaluate=False):
+    if evaluate:
+        model.eval()
+    else:
+        model.train()
+    outs = model(inputs)
+    loss = crit(outs, labels)
+    return outs, loss
+
+def accuracy(outs, labels):
+    # find the highest probability of the two categories
+    _, preds = torch.max(outs, dim=1)
+    # return % of correct predictions (matched w/ labels)
+    return (torch.tensor(torch.sum(preds==labels).item() / len(preds))) * 100    
