@@ -9,6 +9,10 @@
 
 # COMMAND ----------
 
+!pip install torch
+
+# COMMAND ----------
+
 from pyspark.sql import SparkSession
 import pyspark.pandas as ps
 from pyspark.ml.feature import StringIndexer
@@ -62,7 +66,7 @@ spark_df.show(10)
 
 # COMMAND ----------
 
-train_df, test_df = spark_df.randomSplit([0.7, 0.3], seed=42)
+train_df, test_df = spark_df.randomSplit([0.8, 0.2], seed=42)
 
 
 # COMMAND ----------
@@ -84,7 +88,9 @@ class LOLModelmk2(nn.Module):
         self.fc2 = nn.Linear(64, 32)
         self.fc3 = nn.Linear(32, 16)
         self.fc4 = nn.Linear(16, output_size)
-        
+#adding dropout between layers to avoid overfitting
+        self.dp = nn.Dropout(0.5)
+
     def forward(self, x):
         x = self.fc1(x)
         x = F.relu(x)
@@ -97,7 +103,7 @@ class LOLModelmk2(nn.Module):
 
 # COMMAND ----------
 
-crit = F.cross_entropy #criterion
+crit = nn.L1Loss() #criterion
 opt_func = torch.optim.SGD #optimizer function (w/o params or lr)
 
 # COMMAND ----------
@@ -158,3 +164,20 @@ def accuracy(outs, labels):
     _, preds = torch.max(outs, dim=1)
     # return % of correct predictions (matched w/ labels)
     return (torch.tensor(torch.sum(preds==labels).item() / len(preds))) * 100    
+
+# COMMAND ----------
+
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
+
+# COMMAND ----------
+
+device
+
+# COMMAND ----------
+
+model = LOLModelmk2().to(device)
+model
+
