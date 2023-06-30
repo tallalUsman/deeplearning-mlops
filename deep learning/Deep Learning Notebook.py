@@ -55,6 +55,9 @@ for col in categorical_cols:
 
 spark_df = spark_df.drop('fixture_date', 'fixture_id', 'referee', 'venue_id', 'status', 'away_team_id', 'home_team_id', 'match_result', 'coach_id_home', 'coach_id_away','league_id', 'season')
 
+spark_df = spark_df.dropna()
+
+
 # COMMAND ----------
 
 spark_df.show(10)
@@ -78,14 +81,14 @@ features = pandas_df.drop(['away_goals', 'home_goals'], axis=1).values
 
 # COMMAND ----------
 
-test_size = int(.10 * 23269) # represents size of validation set
+test_size = int(.10 * 22603) # represents size of validation set
 val_size = test_size
-train_size = 23269 - test_size*2
+train_size = 22603 - test_size*2
 train_size , val_size, test_size
 
 # COMMAND ----------
 
-dataset = torch.utils.data.TensorDataset(torch.tensor(features).float(), torch.tensor(targets1), torch.tensor(targets2))
+dataset = torch.utils.data.TensorDataset(torch.tensor(features).float(), torch.tensor(targets1).unsqueeze(-1), torch.tensor(targets2).unsqueeze(-1))
 train_ds, val_ds, test_ds = random_split(dataset, [train_size, val_size, test_size])
 batch_size = 256
 
@@ -173,6 +176,9 @@ def fit(epochs, lr, model, train_loader, val_loader, crit, opt_func, device):
 
 def evaluate(model, loader, crit, device):
     losses = []
+    accuracies = []
+    # define the tolerance level
+    tol = 0.4
     model.eval()
     # tracking gradient not needed
     with torch.no_grad():
@@ -182,9 +188,13 @@ def evaluate(model, loader, crit, device):
             (outs1, outs2), (loss1, loss2) = step(inputs, target1, target2, model, crit, evaluate=True)
             loss = loss1 + loss2  # consider if this is the appropriate way to handle multiple losses
             losses.append(loss.item())
-    # average loss for all data on loader
+            acc1 = ((outs1 - target1).abs() <= tol).float().mean()
+            acc2 = ((outs2 - target2).abs() <= tol).float().mean()
+            accuracies.append((acc1 + acc2) / 2)  # average of the two accuracies
+
     avg_loss = sum(losses) / len(losses)
-    return {'avg_loss':avg_loss}
+    avg_acc = sum(accuracies) / len(accuracies)  # compute average "accuracy"
+    return {'avg_loss': avg_loss, 'avg_acc': avg_acc}
 
 # function to input features into model (used for training + validation)
 def step(inputs, target1, target2, model, crit, evaluate=False):
@@ -192,7 +202,6 @@ def step(inputs, target1, target2, model, crit, evaluate=False):
     loss1 = crit(outs1, target1)
     loss2 = crit(outs2, target2)
     return (outs1, outs2), (loss1, loss2)
-
 
 
 # COMMAND ----------
@@ -250,19 +259,19 @@ def visualize(hist, acc=False):
 before_train = evaluate(model, test_loader, crit, device)
 before_train
 
-hist = [evaluate(model, val_loader)]
+hist = [evaluate(model, val_loader, crit, device)]
 
 # COMMAND ----------
 
-hist += fit(25, 1e-3, model, train_loader, val_loader)
+hist += fit(25, 1e-3, model, train_loader, val_loader, crit, opt_func, device)
 
 # COMMAND ----------
 
-hist += fit(50, 1e-4, model, train_loader, val_loader)
+hist += fit(50, 1e-4, model, train_loader, val_loader, crit, opt_func,device)
 
 # COMMAND ----------
 
-after_train = evaluate(model, test_loader)
+after_train = evaluate(model, test_loader, crit, device)
 after_train
 
 # COMMAND ----------
