@@ -67,7 +67,7 @@ spark_df.show(10)
 # COMMAND ----------
 
 pandas_df = spark_df.toPandas()
-
+pandas_df.head(5)
 
 # COMMAND ----------
 
@@ -78,7 +78,7 @@ features = pandas_df.drop(['away_goals', 'home_goals'], axis=1).values
 
 # COMMAND ----------
 
-test_size = int(.15 * 23269) # represents size of validation set
+test_size = int(.10 * 23269) # represents size of validation set
 val_size = test_size
 train_size = 23269 - test_size*2
 train_size , val_size, test_size
@@ -94,11 +94,11 @@ batch_size = 256
 
 train_loader = DataLoader(train_ds, batch_size, shuffle=True, num_workers=4, pin_memory=False)
 val_loader = DataLoader(val_ds, batch_size*2, num_workers=4, pin_memory=False)
-test_loader = DataLoader(test_ds, batch_size*2, pin_memory=False)
+test_loader = DataLoader(test_ds, batch_size*2, num_workers=4, pin_memory=False)
 
 # COMMAND ----------
 
-for x, y1, y2 in train_loader:
+for x, y1, y2 in test_loader:
     print(x.shape, y1.shape, y2.shape)
     break
 
@@ -114,31 +114,31 @@ train_loader
 # COMMAND ----------
 
 input_size = 14
-output_size = 2
+output_size = 1
 
 # COMMAND ----------
 
+output_size = 1
 class FootballModelMk2(nn.Module):
-    def __init__(self):
+    def __init__(self, input_size, output_size):
         super().__init__()
         self.fc1 = nn.Linear(input_size, 64)
         self.fc2 = nn.Linear(64, 32)
-        self.fc3 = nn.Linear(64, 32)
-        self.fc4 = nn.Linear(32, 16)
-        self.fc5 = nn.Linear(16, output_size)
-#adding dropout between layers to avoid overfitting
+        self.fc3_1 = nn.Linear(32, output_size)  # output for target1
+        self.fc3_2 = nn.Linear(32, output_size)  # output for target2
         self.dp = nn.Dropout(0.5)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.bn2 = nn.BatchNorm1d(32)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
+        x = F.relu(self.bn1(self.fc1(x)))
         x = self.dp(x)
-        x = F.relu(self.fc2(x))
+        x = F.relu(self.bn2(self.fc2(x)))
         x = self.dp(x)
-        x = F.relu(self.fc3(x))
-        x = self.dp(x)
-        x = F.relu(self.fc4(x))
-        x = self.fc5(x)
-        return x
+        out1 = self.fc3_1(x)  # prediction for target1
+        out2 = self.fc3_2(x)  # prediction for target2
+        return out1, out2
+
 
 # COMMAND ----------
 
@@ -147,62 +147,53 @@ opt_func = torch.optim.SGD #optimizer function (w/o params or lr)
 
 # COMMAND ----------
 
-def fit(epochs, lr, model, train_loader, val_loader):
-    h = []
+def fit(epochs, lr, model, train_loader, val_loader, crit, opt_func, device):
+    history = []
     # define optimizer
     opt = opt_func(model.parameters(), lr=lr)
     # loop for num of epochs
     for epoch in range(epochs):
-        # training per epoch (iterate tru each batch)
-        for inputs, labels in train_loader:
-            # put inputs to gpu (explained later)
-            inputs, labels = inputs.to(device), labels.to(device)
+        # training per epoch (iterate through each batch)
+        for inputs, target1, target2 in train_loader:
+            # put inputs to the same device as model (GPU or CPU)
+            inputs, target1, target2 = inputs.to(device), target1.to(device), target2.to(device)
             # using optimizer & loss
             opt.zero_grad()
-            _, loss = step(inputs, labels)
+            (outs1, outs2), (loss1, loss2) = step(inputs, target1, target2, model, crit)
+            loss = loss1 + loss2  # consider if this is the appropriate way to handle multiple losses
             loss.backward()
             opt.step()
         # evaluate model on validation set every epoch
-        val_results = evaluate(model, val_loader)
+        val_results = evaluate(model, val_loader, crit, device)
         # printing as output every 5 epochs
         if (epoch + 1) % 5 == 0 or (epoch + 1) == epochs:
-            print(f'Epoch #{epoch + 1} ==> Val Loss: {val_results["avg_loss"]} | Val Acc: {val_results["avg_acc"]}')
-        h.append(val_results)
-    return h
-        
-def evaluate(model, loader):
+            print(f'Epoch #{epoch + 1} ==> Val Loss: {val_results["avg_loss"]}')
+        history.append(val_results)
+    return history
+
+def evaluate(model, loader, crit, device):
     losses = []
-    accs = []
+    model.eval()
     # tracking gradient not needed
     with torch.no_grad():
         # looping over data loader
-        for inputs, labels in loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outs, loss = step(inputs, labels, evaluate=True)
-            # computing accuracy (function below)
-            acc = accuracy(outs, labels)
-            losses.append(loss)
-            accs.append(acc)
-    # avg loss + acc for all data on loader
+        for inputs, target1, target2 in train_loader:
+            inputs, target1, target2 = inputs.to(device), target1.to(device), target2.to(device)
+            (outs1, outs2), (loss1, loss2) = step(inputs, target1, target2, model, crit, evaluate=True)
+            loss = loss1 + loss2  # consider if this is the appropriate way to handle multiple losses
+            losses.append(loss.item())
+    # average loss for all data on loader
     avg_loss = sum(losses) / len(losses)
-    avg_acc = sum(accs) / len(accs)
-    return {'avg_loss':avg_loss, 'avg_acc':avg_acc}
-            
-# function to input features into model (used for training + validation)
-def step(inputs, labels, evaluate=False):
-    if evaluate:
-        model.eval()
-    else:
-        model.train()
-    outs = model(inputs)
-    loss = crit(outs, labels)
-    return outs, loss
+    return {'avg_loss':avg_loss}
 
-def accuracy(outs, labels):
-    # find the highest probability of the two categories
-    _, preds = torch.max(outs, dim=1)
-    # return % of correct predictions (matched w/ labels)
-    return (torch.tensor(torch.sum(preds==labels).item() / len(preds))) * 100    
+# function to input features into model (used for training + validation)
+def step(inputs, target1, target2, model, crit, evaluate=False):
+    outs1, outs2 = model(inputs)
+    loss1 = crit(outs1, target1)
+    loss2 = crit(outs2, target2)
+    return (outs1, outs2), (loss1, loss2)
+
+
 
 # COMMAND ----------
 
@@ -222,6 +213,64 @@ device
 
 # COMMAND ----------
 
-model = FootballModelMk2().to(device)
+model = FootballModelMk2(input_size, output_size).to(device)
 model
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Visualization Setup
+
+# COMMAND ----------
+
+import matplotlib.pyplot as plt
+
+def visualize(hist, acc=False):
+    losses = [x['avg_loss'] for x in hist]
+    accs = [x['avg_acc'] for x in hist]
+    if acc:
+        plt.plot(accs)
+        plt.ylabel('Accuracy (%)')
+        plt.title('Accuracy over Epochs')
+    else:
+        plt.plot(losses)
+        plt.ylabel('Losses')
+        plt.title('Losses over Epochs')
+    plt.xlabel('Epochs')
+    plt.show()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Run Model
+
+# COMMAND ----------
+
+before_train = evaluate(model, test_loader, crit, device)
+before_train
+
+hist = [evaluate(model, val_loader)]
+
+# COMMAND ----------
+
+hist += fit(25, 1e-3, model, train_loader, val_loader)
+
+# COMMAND ----------
+
+hist += fit(50, 1e-4, model, train_loader, val_loader)
+
+# COMMAND ----------
+
+after_train = evaluate(model, test_loader)
+after_train
+
+# COMMAND ----------
+
+visualize(hist)
+
+
+# COMMAND ----------
+
+visualize(hist, acc=True)
 
