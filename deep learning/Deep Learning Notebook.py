@@ -62,12 +62,49 @@ spark_df.show(10)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Create Training and Testing Set
+# MAGIC ## Create Training and Testing Set: Load
 
 # COMMAND ----------
 
-train_df, test_df = spark_df.randomSplit([0.8, 0.2], seed=42)
+pandas_df = spark_df.toPandas()
 
+
+# COMMAND ----------
+
+targets1 = pandas_df['away_goals'].values.flatten()
+targets2 = pandas_df['home_goals'].values.flatten()
+
+features = pandas_df.drop(['away_goals', 'home_goals'], axis=1).values
+
+# COMMAND ----------
+
+test_size = int(.15 * 23269) # represents size of validation set
+val_size = test_size
+train_size = 23269 - test_size*2
+train_size , val_size, test_size
+
+# COMMAND ----------
+
+dataset = torch.utils.data.TensorDataset(torch.tensor(features).float(), torch.tensor(targets1), torch.tensor(targets2))
+train_ds, val_ds, test_ds = random_split(dataset, [train_size, val_size, test_size])
+batch_size = 256
+
+
+# COMMAND ----------
+
+train_loader = DataLoader(train_ds, batch_size, shuffle=True, num_workers=4, pin_memory=False)
+val_loader = DataLoader(val_ds, batch_size*2, num_workers=4, pin_memory=False)
+test_loader = DataLoader(test_ds, batch_size*2, pin_memory=False)
+
+# COMMAND ----------
+
+for x, y1, y2 in train_loader:
+    print(x.shape, y1.shape, y2.shape)
+    break
+
+# COMMAND ----------
+
+train_loader
 
 # COMMAND ----------
 
@@ -76,29 +113,31 @@ train_df, test_df = spark_df.randomSplit([0.8, 0.2], seed=42)
 
 # COMMAND ----------
 
-input_size = 15
+input_size = 14
 output_size = 2
 
 # COMMAND ----------
 
-class LOLModelmk2(nn.Module):
+class FootballModelMk2(nn.Module):
     def __init__(self):
         super().__init__()
         self.fc1 = nn.Linear(input_size, 64)
         self.fc2 = nn.Linear(64, 32)
-        self.fc3 = nn.Linear(32, 16)
-        self.fc4 = nn.Linear(16, output_size)
+        self.fc3 = nn.Linear(64, 32)
+        self.fc4 = nn.Linear(32, 16)
+        self.fc5 = nn.Linear(16, output_size)
 #adding dropout between layers to avoid overfitting
         self.dp = nn.Dropout(0.5)
 
     def forward(self, x):
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.fc2(x)
-        x = F.relu(x)
-        x = self.fc3(x)
-        x = F.relu(x)
-        x = self.fc4(x)
+        x = F.relu(self.fc1(x))
+        x = self.dp(x)
+        x = F.relu(self.fc2(x))
+        x = self.dp(x)
+        x = F.relu(self.fc3(x))
+        x = self.dp(x)
+        x = F.relu(self.fc4(x))
+        x = self.fc5(x)
         return x
 
 # COMMAND ----------
@@ -167,6 +206,11 @@ def accuracy(outs, labels):
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### Use GPU if available
+
+# COMMAND ----------
+
 if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
@@ -178,6 +222,6 @@ device
 
 # COMMAND ----------
 
-model = LOLModelmk2().to(device)
+model = FootballModelMk2().to(device)
 model
 
