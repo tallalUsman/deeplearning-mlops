@@ -1,7 +1,7 @@
 # Introduction: Cloud-native Deep Learning MLOps Pipeline
 
 ## 1.1. Pipeline and Infra
-Data is gathered from  ((https://www.api-football.com/), using API pulls.
+Data is gathered from  ((https://www.api-football.com/), using the API.
 
 ### 1.12. Infrastructure
 The project is hosted entirely in cloud-native environments. The entire pipeline is automated and meant to automatically pull data once new data becomes available for past matches.
